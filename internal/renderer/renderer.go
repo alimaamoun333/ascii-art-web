@@ -75,11 +75,6 @@ type Row struct {
 	Segments []Segment
 }
 
-type Block struct {
-	Rows    []Row
-	IsSpace bool
-}
-
 var ErrUnsupportedCharacter = errors.New("unsupported character")
 var ErrEmptyText = errors.New("text cannot be empty")
 var ErrInvalidColoredRanges = errors.New("invalid colored ranges")
