@@ -1,6 +1,6 @@
 # ASCII Art Web
 
-A web-based graphical interface for generating ASCII art banners from text inputs, built with the Go standard library.
+A web-based graphical interface for generating ASCII art banners from text inputs with advanced styling, color customization, alignment options, and targeted substring highlighting, built entirely with the Go standard library.
 
 ---
 
@@ -9,9 +9,12 @@ A web-based graphical interface for generating ASCII art banners from text input
 - [Overview](#overview)
 - [Features](#features)
 - [Project Architecture](#project-architecture)
-- [Endpoints & Status Codes](#endpoints--status-codes)
-  - [HTTP Status Codes](#http-status-codes)
-  - [Error Conditions](#error-conditions)
+  - [System Flow](#system-flow)
+  - [Package Breakdown](#package-breakdown)
+- [Endpoints & Request Reference](#endpoints--request-reference)
+  - [HTTP Routes](#http-routes)
+  - [Form Parameters](#form-parameters)
+  - [HTTP Status Codes & Error Handling](#http-status-codes--error-handling)
 - [Usage Examples](#usage-examples)
   - [Web Interface](#web-interface)
   - [cURL / Command Line](#curl--command-line)
@@ -24,88 +27,160 @@ A web-based graphical interface for generating ASCII art banners from text input
 
 ## Overview
 
-**ASCII Art Web** is an HTTP server application that converts user-provided text into decorative ASCII art using standard ASCII banner font templates. Users interact with the service through an HTML interface to submit text and choose between available banner styles.
+**ASCII Art Web** is an HTTP server application written in Go that transforms standard text into decorative ASCII art using standard ASCII banner font templates. Users interact with the application via an HTML interface or directly through HTTP POST requests to customize banner styles, text alignment, foreground colors, and targeted substring coloring.
 
-The application is built cleanly without external frameworks, relying solely on Go's standard library packages (`net/http`, `html/template`, `os`, `strings`, `sync`, etc.).
+The project is built without external third-party frameworks, relying strictly on Go's standard library packages (`net/http`, `html/template`, `os`, `strings`, `sync`, `bytes`, etc.).
 
 ---
 
 ## Features
 
-- **Interactive Web Interface**: Semantic HTML5 form to enter text and select banner fonts.
+- **Interactive Web Interface**: Semantic HTML5 form for user input, font selection, alignment, color customization, and instant generation.
 - **Multiple Banner Styles**:
   - `standard`
   - `shadow`
   - `thinkertoy`
-- **Multiline Rendering**: Supports text containing line breaks (`\r\n` / `\n`) and consecutive empty lines.
+- **Text Alignment**:
+  - `left` (default)
+  - `center`
+  - `right`
+  - `justify` (computes inter-word justification spaces and flexbox layout across lines)
+- **Color Customization**:
+  - Supports 8 standard terminal colors: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, and `white`.
+  - Contrast optimization: Light colors automatically apply a dark contrast background (`#1F2937`) for readability.
+- **Targeted Substring Coloring**:
+  - Color the entire banner or highlight specific target words, substrings, or individual characters.
+  - Case-sensitive matching with support for repeated occurrences, partial-word coloring, and multiline targets.
+- **Multiline & Line Break Support**:
+  - Handles line breaks and normalizes CRLF (`\r\n`) and LF (`\n`).
+  - Correctly renders consecutive blank lines.
 - **Strict Input Validation**:
   - Rejects empty strings or whitespace-only inputs.
-  - Validates characters against printable ASCII (decimal 32 to 126) and newlines.
-  - Validates banner names against known styles.
-- **Robust HTTP Error Handling**:
-  - Correct HTTP status codes (`200 OK`, `400 Bad Request`, `404 Not Found`, `405 Method Not Allowed`, `500 Internal Server Error`).
-  - Sets appropriate `Allow` response headers on `405 Method Not Allowed`.
-  - Buffered template rendering prevents partial responses and duplicate HTTP status writes.
-- **Comprehensive Unit Testing**: High test coverage across router, handlers, renderer, and banner parser.
+  - Restricts text and target to printable ASCII characters (decimal 32 to 126) and newline characters.
+  - Ensures target substring does not exceed the text input length.
+  - Validates banner font and color selections against allowed options.
+- **Robust HTTP Architecture**:
+  - Standard status codes (`200 OK`, `400 Bad Request`, `404 Not Found`, `405 Method Not Allowed`, `500 Internal Server Error`).
+  - Includes appropriate `Allow` response headers on `405 Method Not Allowed`.
+  - Thread-safe banner loading and template parsing via `sync.Once`.
+  - Buffered template execution (`bytes.Buffer`) to prevent partial or corrupted responses on render errors.
+- **Comprehensive Test Suite**:
+  - Extensive unit tests covering routing, handlers, ASCII rendering, character boundary calculations, justification layouts, and banner file parsing.
 
 ---
 
 ## Project Architecture
 
+### System Flow
+
 ```
-                    +-------------------+
-                    |    Web Browser    |
-                    +---------+---------+
-                              |
-                      HTTP GET / POST
-                              v
-                    +-------------------+
-                    |   HTTP Handlers   | (internal/handlers)
-                    +---------+---------+
-                              |
-                    +---------v---------+
-                    |  ASCII Renderer   | (internal/renderer)
-                    +---------+---------+
-                              |
-                    +---------v---------+
-                    |   Banner Loader   | (internal/banner)
-                    +---------+---------+
-                              |
-                        banners/*.txt
+                      +-------------------+
+                      |    Web Browser    |
+                      +---------+---------+
+                                |
+                        HTTP GET / POST
+                                v
+                      +-------------------+
+                      |   HTTP Handlers   | (internal/handlers)
+                      +---------+---------+
+                                |
+             +------------------+------------------+
+             |                                     |
+   (Standard Rendering)                 (Justify / Targeted)
+             v                                     v
++------------------------+             +------------------------+
+|    internal/renderer   |             |   internal/justify     |
+|   - GenerateArt        |             |   - MarkColored        |
++-----------+------------+             |   - SplitTextBlocks    |
+            |                          +-----------+------------+
+            |                                      |
+            |                          +-----------v------------+
+            |                          |    internal/layout     |
+            |                          |   - CalculateBoundaries|
+            |                          |   - MergeRanges        |
+            |                          +-----------+------------+
+            |                                      |
+            |                          +-----------v------------+
+            |                          |   internal/renderer    |
+            |                          |   - GenerateBlocks     |
+            |                          |   - RenderSelected     |
+            |                          +-----------+------------+
+            |                                      |
+            +------------------+-------------------+
+                               v
+                     +-------------------+
+                     |   Banner Loader   | (internal/banner)
+                     +---------+---------+
+                               |
+                         banners/*.txt
 ```
 
-- **`main.go`**: Configures routes on `http.ServeMux` and starts the HTTP server on port `:8080`.
-- **`internal/handlers`**: Manages HTTP request lifecycles, validates method & input, executes templates safely via buffer, and returns appropriate status codes.
-- **`internal/renderer`**: Parses input lines and combines 8-line-high character glyphs from the loaded banner map.
-- **`internal/banner`**: Reads and parses raw banner files into memory indexed by `rune` (ASCII 32–126).
-- **`templates/`**: HTML template rendered by the server.
-- **`banners/`**: Source banner font files (`standard.txt`, `shadow.txt`, `thinkertoy.txt`).
+### Package Breakdown
+
+- **`main.go`**: Configures the HTTP multiplexer (`http.ServeMux`), mounts static file serving on `/static/`, registers routes, and starts the server on port `:8080`.
+- **`internal/handlers`**:
+  - `Home`: Handles `GET /` to render the initial webpage.
+  - `Generate`: Handles `POST /ascii-art`, validates form inputs (`text`, `banner`, `alignment`, `color`, `target`), invokes appropriate renderer pipelines, and executes the HTML template safely using an in-memory buffer.
+- **`internal/renderer`**:
+  - Loads and caches banner shapes once thread-safely using `sync.Once`.
+  - Converts text lines into 8-row ASCII glyphs (`RenderCharacter`, `RenderLine`, `Render`, `GenerateArt`).
+  - Provides segment-based rendering (`SegmentRow`, `RenderSelected`, `RenderBlocks`, `GenerateBlocks`) for targeted coloring and block-based justification.
+- **`internal/justify`**:
+  - Tokenizes lines into words and spacing gaps (`LineLayout`, `ParseLine`).
+  - Marks character match masks (`MarkColored`).
+  - Splits lines into `TextBlock` units, identifying internal justification spaces.
+- **`internal/layout`**:
+  - Calculates exact pixel/column boundary widths for character glyphs row by row (`CalculateCharacterBoundaries`, `CalculateMultilineBoundaries`).
+  - Identifies substring match positions (`FindRanges`, `MergeRanges`).
+  - Maps character indices to rendered row column spans (`CharacterRangeToRenderedRange`).
+- **`internal/banner`**:
+  - Parses banner font files (`standard.txt`, `shadow.txt`, `thinkertoy.txt`) into memory indexed by `rune` (ASCII 32–126).
+- **`templates/`**:
+  - `index.html`: Go HTML template with semantic layout, options form, and result display supporting both monolithic ASCII blocks and flexbox block lines.
+- **`static/css/`**:
+  - `style.css`: Presentation styles for font colors, dark contrast backgrounds, flexbox containers, and alignment rules (`align-left`, `align-center`, `align-right`, `align-justify`).
 
 ---
 
-## Endpoints & Status Codes
+## Endpoints & Request Reference
 
-### HTTP Status Codes
+### HTTP Routes
 
-| Endpoint | Method | Description | Possible Status Codes |
-|----------|--------|-------------|-----------------------|
-| `/` | `GET` | Renders the home page with the input form | `200 OK` (success)<br>`404 Not Found` (non-root URL)<br>`405 Method Not Allowed` (non-GET)<br>`500 Internal Server Error` (template failure) |
-| `/ascii-art` | `POST` | Processes input text and banner, renders result | `200 OK` (success)<br>`400 Bad Request` (invalid input or banner)<br>`405 Method Not Allowed` (non-POST)<br>`500 Internal Server Error` (server error) |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | `GET` | Serves the main generator form |
+| `/ascii-art` | `POST` | Processes text and rendering options, returns the rendered HTML page |
+| `/static/*` | `GET` | Serves static assets such as CSS stylesheets |
 
-### Error Conditions
+### Form Parameters
 
+When submitting a `POST` request to `/ascii-art`, use `application/x-www-form-urlencoded`:
+
+| Field | Type | Required | Allowed Values | Default | Description |
+|-------|------|----------|----------------|---------|-------------|
+| `text` | string | **Yes** | Printable ASCII (32–126) & newlines | None | The input text to convert into ASCII art. Must not be empty or whitespace-only. |
+| `banner` | string | **Yes** | `standard`, `shadow`, `thinkertoy` | `standard` | The banner font style to use. |
+| `alignment` | string | No | `left`, `center`, `right`, `justify` | `left` | Alignment of the rendered ASCII art. |
+| `color` | string | No | `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` | `black` | Foreground color of the text or targeted substring. |
+| `target` | string | No | Printable ASCII (32–126) & newlines | `""` (empty) | Substring to color. If empty, the entire text is colored. Case-sensitive. |
+
+### HTTP Status Codes & Error Handling
+
+- **`200 OK`**: Request successfully processed and page rendered.
 - **`400 Bad Request`**:
-  - Banner name is missing or invalid (supported: `standard`, `shadow`, `thinkertoy`).
-  - Text input is empty or consists solely of whitespace.
-  - Text contains characters outside the printable ASCII range (`32`–`126`).
+  - Text input is missing, empty, or whitespace-only (`"Text cannot be empty"`).
+  - Selected banner font is unrecognized (`"Invalid banner"`).
+  - Selected color is unrecognized (`"Invalid color"`).
+  - Target string length exceeds the total text length (`"Target cannot be longer than text"`).
+  - Input text or target contains characters outside printable ASCII (32–126) (`"Unsupported character"`).
 - **`404 Not Found`**:
-  - Request sent to an unmapped path (e.g., `/unknown`, `/about`, `/foo`).
+  - Request path is unmapped or non-root (e.g. `GET /unknown`, `GET /hello`).
 - **`405 Method Not Allowed`**:
-  - Method other than `GET` sent to `/` (e.g., `POST /`).
-  - Method other than `POST` sent to `/ascii-art` (e.g., `GET /ascii-art`, `PUT /ascii-art`).
-  - The response includes the `Allow` header indicating supported methods.
+  - Method other than `GET` sent to `/` (e.g. `POST /`).
+  - Method other than `POST` sent to `/ascii-art` (e.g. `GET /ascii-art`).
+  - Includes `Allow` response header specifying permitted methods.
 - **`500 Internal Server Error`**:
-  - Failure reading or parsing banner files or HTML templates.
+  - Failure loading or parsing banner files or executing HTML templates.
 
 ---
 
@@ -113,10 +188,12 @@ The application is built cleanly without external frameworks, relying solely on 
 
 ### Web Interface
 
-1. Start the server and navigate to `http://localhost:8080` in your browser.
-2. Enter your text into the text area (e.g., `Hello World`).
-3. Select a banner style (`standard`, `shadow`, or `thinkertoy`).
-4. Click **Generate ASCII Art** to view the rendered graphic.
+1. Start the server (see [Getting Started](#getting-started)) and open `http://localhost:8080` in your web browser.
+2. Enter your text into the textarea (e.g., `Hello World`).
+3. Select your desired banner style (`standard`, `shadow`, or `thinkertoy`).
+4. Select an alignment (`left`, `center`, `right`, or `justify`).
+5. Choose a text color, and optionally specify a substring in **Text to color** to highlight specific words.
+6. Click **Generate ASCII Art** to render your banner.
 
 ### cURL / Command Line
 
@@ -125,32 +202,51 @@ The application is built cleanly without external frameworks, relying solely on 
   curl -i http://localhost:8080/
   ```
 
-- **Generate ASCII art (`standard` banner):**
+- **Generate basic ASCII art (`standard` font, left-aligned):**
   ```bash
   curl -i -X POST http://localhost:8080/ascii-art \
-       -d "text=Hello&banner=standard"
+       -d "text=Hello+World&banner=standard"
   ```
 
-- **Generate ASCII art (`shadow` banner):**
+- **Generate colored ASCII art with center alignment:**
   ```bash
   curl -i -X POST http://localhost:8080/ascii-art \
-       -d "text=Go+Language&banner=shadow"
+       -d "text=Antigravity&banner=shadow&color=cyan&alignment=center"
   ```
 
-- **Trigger 400 Bad Request (unsupported character):**
+- **Targeted substring coloring with justify alignment:**
   ```bash
   curl -i -X POST http://localhost:8080/ascii-art \
-       -d "text=Hello 🚀&banner=standard"
+       -d "text=Hello+Beautiful+World&banner=standard&color=red&target=Beautiful&alignment=justify"
   ```
 
-- **Trigger 404 Not Found:**
+- **Multiline text input:**
   ```bash
-  curl -i http://localhost:8080/unknown
+  curl -i -X POST http://localhost:8080/ascii-art \
+       --data-urlencode "text=Hello"$'\n'"World" \
+       -d "banner=standard"
   ```
 
-- **Trigger 405 Method Not Allowed:**
+- **Inspect error: Unsupported character (400 Bad Request):**
+  ```bash
+  curl -i -X POST http://localhost:8080/ascii-art \
+       -d "text=Hello+🚀&banner=standard"
+  ```
+
+- **Inspect error: Invalid banner (400 Bad Request):**
+  ```bash
+  curl -i -X POST http://localhost:8080/ascii-art \
+       -d "text=Hello&banner=comic-sans"
+  ```
+
+- **Inspect error: Method Not Allowed (405):**
   ```bash
   curl -i -X GET http://localhost:8080/ascii-art
+  ```
+
+- **Inspect error: Not Found (404):**
+  ```bash
+  curl -i http://localhost:8080/nonexistent
   ```
 
 ---
@@ -174,10 +270,8 @@ The application is built cleanly without external frameworks, relying solely on 
    go run .
    ```
 
-3. **Open in browser:**
-   ```
-   http://localhost:8080
-   ```
+3. **Access the application:**
+   Open [http://localhost:8080](http://localhost:8080) in your browser.
 
 ---
 
@@ -212,6 +306,16 @@ Run tests for specific packages:
   go test -v ./internal/renderer
   ```
 
+- **Text justification tests:**
+  ```bash
+  go test -v ./internal/justify
+  ```
+
+- **Glyph layout & boundary tests:**
+  ```bash
+  go test -v ./internal/layout
+  ```
+
 - **Banner parser tests:**
   ```bash
   go test -v ./internal/banner
@@ -224,23 +328,32 @@ Run tests for specific packages:
 ```text
 ascii-art-web/
 ├── banners/
-│   ├── shadow.txt
-│   ├── standard.txt
-│   └── thinkertoy.txt
+│   ├── shadow.txt          # Shadow banner font glyphs
+│   ├── standard.txt        # Standard banner font glyphs
+│   └── thinkertoy.txt      # Thinkertoy banner font glyphs
 ├── internal/
-│   ├── banner/
+│   ├── banner/             # Banner file loading and ASCII rune parsing
 │   │   ├── banner.go
 │   │   └── banner_test.go
-│   ├── handlers/
+│   ├── handlers/           # HTTP handlers, validation, and template execution
 │   │   ├── handlers.go
 │   │   └── handlers_test.go
-│   └── renderer/
+│   ├── justify/            # Line tokenization and justification logic
+│   │   ├── justify.go
+│   │   └── justify_test.go
+│   ├── layout/             # Substring range matching and character width boundaries
+│   │   ├── layout.go
+│   │   └── layout_test.go
+│   └── renderer/           # ASCII art rendering and segment generation
 │       ├── renderer.go
 │       └── renderer_test.go
+├── static/
+│   └── css/
+│       └── style.css       # Visual styling, colors, and layout flexbox rules
 ├── templates/
-│   └── index.html
-├── go.mod
-├── main.go
-├── main_test.go
-└── README.md
+│   └── index.html          # HTML5 form and result template
+├── go.mod                  # Go module definition
+├── main.go                 # Server entry point and router setup
+├── main_test.go            # Top-level routing and method validation tests
+└── README.md               # Project documentation
 ```
