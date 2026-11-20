@@ -2,6 +2,7 @@ package renderer
 
 import (
 	"ascii-art-web/internal/banner"
+	"ascii-art-web/internal/justify"
 	"ascii-art-web/internal/layout"
 	"errors"
 	"strings"
@@ -73,6 +74,11 @@ type Segment struct {
 
 type Row struct {
 	Segments []Segment
+}
+
+type RenderedBlock struct {
+	Rows    []Row
+	Justify bool
 }
 
 var ErrUnsupportedCharacter = errors.New("unsupported character")
@@ -259,4 +265,61 @@ func RenderSelected(shapes map[rune][]string, text string, target string) ([]Row
 
 	// 8. Return all rendered rows.
 	return result, nil
+}
+
+func RenderBlocks(
+	shapes map[rune][]string,
+	blocks []justify.TextBlock,
+) ([]RenderedBlock, error) {
+	rendered := make([]RenderedBlock, 0, len(blocks))
+
+	for _, block := range blocks {
+		var text strings.Builder
+		target := ""
+
+		for _, segment := range block.Segments {
+			text.WriteString(segment.Text)
+
+			if target == "" && segment.Colored {
+				target = segment.Text
+			}
+		}
+
+		blockText := text.String()
+
+		// Render each space independently.
+		if len(blockText) > 0 && strings.Trim(blockText, " ") == "" {
+			for _, segment := range block.Segments {
+				for range segment.Text {
+					spaceTarget := ""
+					if segment.Colored {
+						spaceTarget = " "
+					}
+
+					rows, err := RenderSelected(shapes, " ", spaceTarget)
+					if err != nil {
+						return nil, err
+					}
+
+					rendered = append(rendered, RenderedBlock{
+						Rows:    rows,
+						Justify: block.Justify,
+					})
+				}
+			}
+			continue
+		}
+
+		rows, err := RenderSelected(shapes, blockText, target)
+		if err != nil {
+			return nil, err
+		}
+
+		rendered = append(rendered, RenderedBlock{
+			Rows:    rows,
+			Justify: block.Justify,
+		})
+	}
+
+	return rendered, nil
 }

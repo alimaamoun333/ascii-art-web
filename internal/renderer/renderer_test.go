@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"ascii-art-web/internal/justify"
 	"ascii-art-web/internal/layout"
 	"errors"
 	"fmt"
@@ -945,5 +946,276 @@ func TestGenerateArt_Success(t *testing.T) {
 	}
 	if art == "" {
 		t.Errorf("expected non-empty ASCII art")
+	}
+}
+
+func TestRenderBlocks(t *testing.T) {
+	shapes := buildTestShapes()
+
+	makeExpectedRows := func(fn func(i int) []Segment) []Row {
+		rows := make([]Row, 8)
+		for i := 0; i < 8; i++ {
+			rows[i] = Row{Segments: fn(i)}
+		}
+		return rows
+	}
+
+	tests := []struct {
+		name      string
+		blocks    []justify.TextBlock
+		customMap map[rune][]string
+		expected  []RenderedBlock
+		expectErr bool
+	}{
+		{
+			name:     "empty blocks list",
+			blocks:   []justify.TextBlock{},
+			expected: []RenderedBlock{},
+		},
+		{
+			name: "single uncolored word block",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: "A", Colored: false}},
+					Justify:  false,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("A%d", i), Colored: false}}
+					}),
+					Justify: false,
+				},
+			},
+		},
+		{
+			name: "single colored word block",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: "A", Colored: true}},
+					Justify:  false,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("A%d", i), Colored: true}}
+					}),
+					Justify: false,
+				},
+			},
+		},
+		{
+			name: "word block with partial coloring",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{
+						{Text: "A", Colored: false},
+						{Text: "B", Colored: true},
+					},
+					Justify: false,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{
+							{Text: fmt.Sprintf("A%d", i), Colored: false},
+							{Text: fmt.Sprintf("B%d", i), Colored: true},
+						}
+					}),
+					Justify: false,
+				},
+			},
+		},
+		{
+			name: "single space block with justify true",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: " ", Colored: false}},
+					Justify:  true,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: true,
+				},
+			},
+		},
+		{
+			name: "multiple spaces split into individual space blocks",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: "  ", Colored: false}},
+					Justify:  true,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: true,
+				},
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: true,
+				},
+			},
+		},
+		{
+			name: "multiple spaces with mixed coloring",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{
+						{Text: " ", Colored: true},
+						{Text: " ", Colored: false},
+					},
+					Justify: true,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: true}}
+					}),
+					Justify: true,
+				},
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: true,
+				},
+			},
+		},
+		{
+			name: "sentence sequence of words and internal spaces",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: "A", Colored: false}},
+					Justify:  false,
+				},
+				{
+					Segments: []justify.Segment{{Text: "  ", Colored: false}},
+					Justify:  true,
+				},
+				{
+					Segments: []justify.Segment{{Text: "B", Colored: true}},
+					Justify:  false,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("A%d", i), Colored: false}}
+					}),
+					Justify: false,
+				},
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: true,
+				},
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: true,
+				},
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("B%d", i), Colored: true}}
+					}),
+					Justify: false,
+				},
+			},
+		},
+		{
+			name: "leading spaces with justify false",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: "  ", Colored: false}},
+					Justify:  false,
+				},
+			},
+			expected: []RenderedBlock{
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: false,
+				},
+				{
+					Rows: makeExpectedRows(func(i int) []Segment {
+						return []Segment{{Text: fmt.Sprintf("S%d", i), Colored: false}}
+					}),
+					Justify: false,
+				},
+			},
+		},
+		{
+			name: "unsupported character in word returns error",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: "Z", Colored: false}},
+					Justify:  false,
+				},
+			},
+			expectErr: true,
+		},
+		{
+			name: "unsupported space character returns error",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: " ", Colored: false}},
+					Justify:  true,
+				},
+			},
+			customMap: map[rune][]string{
+				'A': {"A0", "A1", "A2", "A3", "A4", "A5", "A6", "A7"},
+			},
+			expectErr: true,
+		},
+		{
+			name: "empty text block returns error",
+			blocks: []justify.TextBlock{
+				{
+					Segments: []justify.Segment{{Text: "", Colored: false}},
+					Justify:  false,
+				},
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			targetShapes := shapes
+			if tt.customMap != nil {
+				targetShapes = tt.customMap
+			}
+
+			got, err := RenderBlocks(targetShapes, tt.blocks)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(got, tt.expected) {
+				t.Fatalf("RenderBlocks() = %#v, expected %#v", got, tt.expected)
+			}
+		})
 	}
 }
