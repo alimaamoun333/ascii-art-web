@@ -5,6 +5,7 @@ import (
 	"ascii-art-web/internal/justify"
 	"ascii-art-web/internal/layout"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -81,6 +82,10 @@ type RenderedBlock struct {
 	Justify bool
 }
 
+type RenderedLine struct {
+	Blocks []RenderedBlock
+}
+
 var ErrUnsupportedCharacter = errors.New("unsupported character")
 var ErrEmptyText = errors.New("text cannot be empty")
 var ErrInvalidColoredRanges = errors.New("invalid colored ranges")
@@ -148,12 +153,12 @@ func Render(shapes map[rune][]string, text string) ([]string, error) {
 func GenerateArt(text, bannerName string) (string, error) {
 	bannerShapes, err := GetShapes(bannerName)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("load banner shapes: %w", err)
 	}
 
 	rows, err := Render(bannerShapes, text)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("render text: %w", err)
 	}
 
 	return strings.Join(rows, "\n"), nil
@@ -267,10 +272,7 @@ func RenderSelected(shapes map[rune][]string, text string, target string) ([]Row
 	return result, nil
 }
 
-func RenderBlocks(
-	shapes map[rune][]string,
-	blocks []justify.TextBlock,
-) ([]RenderedBlock, error) {
+func RenderBlocks(shapes map[rune][]string, blocks []justify.TextBlock) ([]RenderedBlock, error) {
 	rendered := make([]RenderedBlock, 0, len(blocks))
 
 	for _, block := range blocks {
@@ -312,7 +314,7 @@ func RenderBlocks(
 
 		rows, err := RenderSelected(shapes, blockText, target)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("render text block: %w", err)
 		}
 
 		rendered = append(rendered, RenderedBlock{
@@ -322,4 +324,36 @@ func RenderBlocks(
 	}
 
 	return rendered, nil
+}
+
+func GenerateBlocks(text string, bannerName string, target string) ([]RenderedLine, error) {
+	bannerShapes, err := GetShapes(bannerName)
+	if err != nil {
+		return nil, fmt.Errorf("load banner shapes: %w", err)
+	}
+	// 1. Normalize newlines for all operations.
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+
+	renderedLines := []RenderedLine{}
+
+	for _, line := range lines {
+		colored := justify.MarkColored(line, target)
+		blocks, err := justify.SplitTextBlocks(line, colored)
+		if err != nil {
+			return nil, fmt.Errorf("split text blocks: %w", err)
+		}
+
+		renderedLineBlocks, err := RenderBlocks(bannerShapes, blocks)
+		if err != nil {
+			return nil, fmt.Errorf("render blocks: %w", err)
+		}
+
+		renderedLines = append(renderedLines, RenderedLine{
+			Blocks: renderedLineBlocks,
+		})
+	}
+
+	return renderedLines, nil
+
 }

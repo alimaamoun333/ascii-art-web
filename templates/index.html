@@ -120,19 +120,23 @@
                 <figure class="art-container align-{{if .Alignment}}{{.Alignment}}{{else}}left{{end}}">
                     <pre class="color-{{.Color}}"><code>{{.Art}}</code></pre>
                 </figure>
-            {{else if .Rows}}
-                <figure class="art-container align-{{if .Alignment}}{{.Alignment}}{{else}}left{{end}}">
-                    <pre><code>{{- range $index, $row := .Rows -}}
-                        {{- if gt $index 0}}{{"\n"}}{{end -}}
-                        {{- range $row.Segments -}}
-                            {{- if .Colored -}}
-                                <span class="color-{{$.Color}}">{{.Text}}</span>
-                            {{- else -}}
-                                {{.Text}}
-                            {{- end -}}
+            {{else if .Lines}}
+                {{- range .Lines -}}
+                    <figure class="art-container align-{{if $.Alignment}}{{$.Alignment}}{{else}}left{{end}}">
+                        {{- range .Blocks -}}
+                            <pre><code>{{- range $index, $row := .Rows -}}
+                                {{- if gt $index 0}}{{"\n"}}{{end -}}
+                                {{- range $row.Segments -}}
+                                    {{- if .Colored -}}
+                                        <span class="color-{{$.Color}}">{{.Text}}</span>
+                                    {{- else -}}
+                                        {{.Text}}
+                                    {{- end -}}
+                                {{- end -}}
+                            {{- end -}}</code></pre>
                         {{- end -}}
-                    {{- end -}}</code></pre>
-                </figure>
+                    </figure>
+                {{- end -}}
             {{else}}
                 <p><em>Your ASCII art will appear here after clicking "Generate ASCII Art".</em></p>
             {{end}}

@@ -18,7 +18,7 @@ var (
 
 type PageData struct {
 	Art       string
-	Rows      []renderer.Row
+	Lines     []renderer.RenderedLine
 	Color     string
 	Alignment string
 	Input     string
@@ -53,13 +53,12 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text := r.FormValue("text")
-	bannerName := r.FormValue("banner")
-	color := r.FormValue("color")
-	color, err := validateColor(color)
-	if err != nil {
-		http.Error(w, "Invalid color", http.StatusBadRequest)
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	if strings.TrimSpace(text) == "" {
+		http.Error(w, "Text cannot be empty", http.StatusBadRequest)
 		return
 	}
+	bannerName := r.FormValue("banner")
 	switch bannerName {
 	case "standard", "shadow", "thinkertoy":
 		// Supported banner.
@@ -67,18 +66,24 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid banner", http.StatusBadRequest)
 		return
 	}
-
-	if strings.TrimSpace(text) == "" {
-		http.Error(w, "Text cannot be empty", http.StatusBadRequest)
+	color := r.FormValue("color")
+	color, err := validateColor(color)
+	if err != nil {
+		http.Error(w, "Invalid color", http.StatusBadRequest)
 		return
 	}
+	alignment := validateAlignment(r.FormValue("alignment"))
 	target := r.FormValue("target")
+	target = strings.ReplaceAll(target, "\r\n", "\n")
+	if len(target) > len(text) {
+		http.Error(w, "Target cannot be longer than text", http.StatusBadRequest)
+		return
+	}
 	shapes, err := renderer.GetShapes(bannerName)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	target = strings.ReplaceAll(target, "\r\n", "\n")
 	err = validateTarget(target, shapes)
 	if err != nil {
 		if errors.Is(err, renderer.ErrUnsupportedCharacter) {
@@ -88,10 +93,20 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+	data := PageData{Color: color, Alignment: alignment, Input: text}
+	if alignment == "justify" || strings.TrimSpace(target) != "" {
+		artLines, err := renderer.GenerateBlocks(text, bannerName, target)
+		if err != nil {
+			if errors.Is(err, renderer.ErrUnsupportedCharacter) {
+				http.Error(w, "Unsupported character", http.StatusBadRequest)
+				return
+			}
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		data.Lines = artLines
 
-	data := PageData{Color: color}
-
-	if strings.TrimSpace(target) == "" {
+	} else {
 		art, err := renderer.GenerateArt(text, bannerName)
 		if err != nil {
 			if errors.Is(err, renderer.ErrUnsupportedCharacter) {
@@ -103,26 +118,8 @@ func Generate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data.Art = art
-	} else {
-		normalizedText := strings.ReplaceAll(text, "\r\n", "\n")
-
-		if len(target) > len(normalizedText) {
-			http.Error(w, "Target cannot be longer than text", http.StatusBadRequest)
-			return
-		}
-		rows, err := renderer.RenderSelected(shapes, text, target)
-		if err != nil {
-			if errors.Is(err, renderer.ErrUnsupportedCharacter) {
-				http.Error(w, "Unsupported character", http.StatusBadRequest)
-				return
-			}
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-		data.Rows = rows
 	}
-	data.Alignment = validateAlignment(r.FormValue("alignment"))
-	data.Input = text
+
 	err = renderPage(w, data)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

@@ -143,7 +143,7 @@ func TestGenerate_UnsupportedCharacter(t *testing.T) {
 		{name: "non-ASCII characters in text", text: "hello 世界", target: ""},
 		{name: "accented characters in text", text: "café", target: ""},
 		{name: "emoji in target", text: "hello", target: "😀"},
-		{name: "non-ASCII characters in target", text: "hello", target: "世界"},
+		{name: "non-ASCII characters in target", text: "hello world", target: "世界"},
 		{name: "accented characters in target", text: "hello", target: "café"},
 	}
 
@@ -442,7 +442,7 @@ func TestGenerate_SelectedColoringScenarios(t *testing.T) {
 		}
 	})
 
-	// Scenario 2: Exact segment content - Only World is colored; Hello  remains uncolored
+	// Scenario 2: Exact segment content - Only World is colored; Hello remains uncolored
 	t.Run("Exact segment content", func(t *testing.T) {
 		formData := url.Values{}
 		formData.Set("text", "Hello World")
@@ -464,9 +464,9 @@ func TestGenerate_SelectedColoringScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to load banner: %v", err)
 		}
-		helloRows, err := renderer.RenderLine(shapes, "Hello ")
+		helloRows, err := renderer.RenderLine(shapes, "Hello")
 		if err != nil {
-			t.Fatalf("failed to render 'Hello ': %v", err)
+			t.Fatalf("failed to render 'Hello': %v", err)
 		}
 		worldRows, err := renderer.RenderLine(shapes, "World")
 		if err != nil {
@@ -474,21 +474,25 @@ func TestGenerate_SelectedColoringScenarios(t *testing.T) {
 		}
 
 		body := recorder.Body.String()
-		// Verify every row has uncolored "Hello " followed by colored "World"
+		// Verify every row has uncolored "Hello" in the word block and colored "World" in the target block
 		for i := 0; i < 8; i++ {
-			expectedRowPattern := html.EscapeString(helloRows[i]) + `<span class="color-red">` + html.EscapeString(worldRows[i]) + `</span>`
-			if !strings.Contains(body, expectedRowPattern) {
-				t.Fatalf("row %d: expected pattern %q not found in body", i, expectedRowPattern)
+			expectedHello := html.EscapeString(helloRows[i])
+			if !strings.Contains(body, expectedHello) {
+				t.Fatalf("row %d: expected uncolored 'Hello' %q not found in body", i, expectedHello)
+			}
+			expectedWorld := `<span class="color-red">` + html.EscapeString(worldRows[i]) + `</span>`
+			if !strings.Contains(body, expectedWorld) {
+				t.Fatalf("row %d: expected colored 'World' %q not found in body", i, expectedWorld)
 			}
 		}
 
-		// Also verify non-empty rows of "Hello " are not wrapped inside a colored span
+		// Also verify non-empty rows of "Hello" are not wrapped inside a colored span
 		for i := 0; i < 8; i++ {
 			trimmed := strings.TrimSpace(helloRows[i])
 			if trimmed != "" {
 				unwantedPattern := `<span class="color-red">` + html.EscapeString(trimmed)
 				if strings.Contains(body, unwantedPattern) {
-					t.Fatalf("row %d: 'Hello ' was unexpectedly colored", i)
+					t.Fatalf("row %d: 'Hello' was unexpectedly colored", i)
 				}
 			}
 		}
@@ -526,17 +530,19 @@ func TestGenerate_SelectedColoringScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to render 'World': %v", err)
 		}
-		spaceHelloSpaceRows, err := renderer.RenderLine(shapes, " Hello ")
+		helloRows, err := renderer.RenderLine(shapes, "Hello")
 		if err != nil {
-			t.Fatalf("failed to render ' Hello ': %v", err)
+			t.Fatalf("failed to render 'Hello': %v", err)
 		}
 
 		for i := 0; i < 8; i++ {
-			expectedRowPattern := `<span class="color-blue">` + html.EscapeString(worldRows[i]) + `</span>` +
-				html.EscapeString(spaceHelloSpaceRows[i]) +
-				`<span class="color-blue">` + html.EscapeString(worldRows[i]) + `</span>`
-			if !strings.Contains(body, expectedRowPattern) {
-				t.Fatalf("row %d: expected pattern %q not found in body", i, expectedRowPattern)
+			expectedWorld := `<span class="color-blue">` + html.EscapeString(worldRows[i]) + `</span>`
+			if !strings.Contains(body, expectedWorld) {
+				t.Fatalf("row %d: expected colored 'World' not found in body", i)
+			}
+			expectedHello := html.EscapeString(helloRows[i])
+			if !strings.Contains(body, expectedHello) {
+				t.Fatalf("row %d: expected uncolored 'Hello' not found in body", i)
 			}
 		}
 	})
@@ -568,15 +574,22 @@ func TestGenerate_SelectedColoringScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to load banner: %v", err)
 		}
-		helloWorldRows, err := renderer.RenderLine(shapes, "Hello World")
+		helloRows, err := renderer.RenderLine(shapes, "Hello")
 		if err != nil {
-			t.Fatalf("failed to render 'Hello World': %v", err)
+			t.Fatalf("failed to render 'Hello': %v", err)
+		}
+		worldRows, err := renderer.RenderLine(shapes, "World")
+		if err != nil {
+			t.Fatalf("failed to render 'World': %v", err)
 		}
 
 		// Ensure all rows are completely uncolored
 		for i := 0; i < 8; i++ {
-			if !strings.Contains(body, html.EscapeString(helloWorldRows[i])) {
-				t.Fatalf("row %d: uncolored text %q not found in body", i, helloWorldRows[i])
+			if !strings.Contains(body, html.EscapeString(helloRows[i])) {
+				t.Fatalf("row %d: uncolored text 'Hello' %q not found in body", i, helloRows[i])
+			}
+			if !strings.Contains(body, html.EscapeString(worldRows[i])) {
+				t.Fatalf("row %d: uncolored text 'World' %q not found in body", i, worldRows[i])
 			}
 		}
 	})
@@ -609,32 +622,24 @@ func TestGenerate_SelectedColoringScenarios(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to load banner: %v", err)
 		}
-		helloSpaceRows, err := renderer.RenderLine(shapes, "Hello ")
+		helloRows, err := renderer.RenderLine(shapes, "Hello")
 		if err != nil {
-			t.Fatalf("failed to render 'Hello ': %v", err)
-		}
-		spaceHelloRows, err := renderer.RenderLine(shapes, " Hello")
-		if err != nil {
-			t.Fatalf("failed to render ' Hello': %v", err)
+			t.Fatalf("failed to render 'Hello': %v", err)
 		}
 		worldRows, err := renderer.RenderLine(shapes, "World")
 		if err != nil {
 			t.Fatalf("failed to render 'World': %v", err)
 		}
 
-		// Line 1: "Hello " uncolored, then "World" colored
+		// Verify line 1 and line 2 both contain uncolored Hello and colored World
 		for i := 0; i < 8; i++ {
-			expectedLine1Pattern := html.EscapeString(helloSpaceRows[i]) + `<span class="color-yellow">` + html.EscapeString(worldRows[i]) + `</span>`
-			if !strings.Contains(body, expectedLine1Pattern) {
-				t.Fatalf("line 1 row %d: expected pattern %q not found in body", i, expectedLine1Pattern)
+			expectedWorld := `<span class="color-yellow">` + html.EscapeString(worldRows[i]) + `</span>`
+			if !strings.Contains(body, expectedWorld) {
+				t.Fatalf("row %d: expected colored 'World' not found in body", i)
 			}
-		}
-
-		// Line 2: "World" colored, then " Hello" uncolored
-		for i := 0; i < 8; i++ {
-			expectedLine2Pattern := `<span class="color-yellow">` + html.EscapeString(worldRows[i]) + `</span>` + html.EscapeString(spaceHelloRows[i])
-			if !strings.Contains(body, expectedLine2Pattern) {
-				t.Fatalf("line 2 row %d: expected pattern %q not found in body", i, expectedLine2Pattern)
+			expectedHello := html.EscapeString(helloRows[i])
+			if !strings.Contains(body, expectedHello) {
+				t.Fatalf("row %d: expected uncolored 'Hello' not found in body", i)
 			}
 		}
 	})

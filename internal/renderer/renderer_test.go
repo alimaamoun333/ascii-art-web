@@ -1219,3 +1219,221 @@ func TestRenderBlocks(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateBlocks(t *testing.T) {
+	ResetShapes()
+	defer ResetShapes()
+
+	t.Run("empty text returns single line with empty blocks", func(t *testing.T) {
+		lines, err := GenerateBlocks("", "standard", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(lines) != 1 {
+			t.Fatalf("expected 1 line, got %d", len(lines))
+		}
+		if len(lines[0].Blocks) != 0 {
+			t.Fatalf("expected 0 blocks, got %d", len(lines[0].Blocks))
+		}
+	})
+
+	t.Run("single word uncolored", func(t *testing.T) {
+		lines, err := GenerateBlocks("Hello", "standard", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(lines) != 1 {
+			t.Fatalf("expected 1 line, got %d", len(lines))
+		}
+		blocks := lines[0].Blocks
+		if len(blocks) != 1 {
+			t.Fatalf("expected 1 block, got %d", len(blocks))
+		}
+		if blocks[0].Justify {
+			t.Errorf("expected Justify to be false for word block")
+		}
+		if len(blocks[0].Rows) != 8 {
+			t.Fatalf("expected 8 rows, got %d", len(blocks[0].Rows))
+		}
+		for r, row := range blocks[0].Rows {
+			if len(row.Segments) != 1 {
+				t.Fatalf("row %d: expected 1 segment, got %d", r, len(row.Segments))
+			}
+			if row.Segments[0].Colored {
+				t.Errorf("row %d: expected segment to be uncolored", r)
+			}
+		}
+	})
+
+	t.Run("multiple words with justify space", func(t *testing.T) {
+		lines, err := GenerateBlocks("Hi there", "standard", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(lines) != 1 {
+			t.Fatalf("expected 1 line, got %d", len(lines))
+		}
+		blocks := lines[0].Blocks
+		// "Hi" (false), " " (true), "there" (false) -> 3 blocks
+		if len(blocks) != 3 {
+			t.Fatalf("expected 3 blocks, got %d", len(blocks))
+		}
+		if blocks[0].Justify != false {
+			t.Errorf("block 0: expected Justify false")
+		}
+		if blocks[1].Justify != true {
+			t.Errorf("block 1: expected Justify true for internal space")
+		}
+		if blocks[2].Justify != false {
+			t.Errorf("block 2: expected Justify false")
+		}
+	})
+
+	t.Run("multiple spaces expand to individual justify blocks", func(t *testing.T) {
+		lines, err := GenerateBlocks("A   B", "standard", "")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(lines) != 1 {
+			t.Fatalf("expected 1 line, got %d", len(lines))
+		}
+		blocks := lines[0].Blocks
+		// "A" (false), 3 spaces (each true), "B" (false) -> 5 blocks
+		if len(blocks) != 5 {
+			t.Fatalf("expected 5 blocks, got %d", len(blocks))
+		}
+		if blocks[0].Justify != false || blocks[4].Justify != false {
+			t.Errorf("expected words to have Justify false")
+		}
+		for i := 1; i <= 3; i++ {
+			if !blocks[i].Justify {
+				t.Errorf("block %d: expected Justify true", i)
+			}
+		}
+	})
+
+	t.Run("target coloring word", func(t *testing.T) {
+		lines, err := GenerateBlocks("Hello World", "standard", "World")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(lines) != 1 {
+			t.Fatalf("expected 1 line, got %d", len(lines))
+		}
+		blocks := lines[0].Blocks
+		if len(blocks) != 3 {
+			t.Fatalf("expected 3 blocks, got %d", len(blocks))
+		}
+		// "Hello" uncolored
+		for _, row := range blocks[0].Rows {
+			for _, seg := range row.Segments {
+				if seg.Colored {
+					t.Errorf("expected 'Hello' to be uncolored")
+				}
+			}
+		}
+		// "World" colored
+		for _, row := range blocks[2].Rows {
+			for _, seg := range row.Segments {
+				if !seg.Colored {
+					t.Errorf("expected 'World' to be colored")
+				}
+			}
+		}
+	})
+
+	t.Run("partial word coloring", func(t *testing.T) {
+		lines, err := GenerateBlocks("Hello", "standard", "ell")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(lines) != 1 {
+			t.Fatalf("expected 1 line, got %d", len(lines))
+		}
+		blocks := lines[0].Blocks
+		if len(blocks) != 1 {
+			t.Fatalf("expected 1 block, got %d", len(blocks))
+		}
+		for r, row := range blocks[0].Rows {
+			if len(row.Segments) != 3 {
+				t.Fatalf("row %d: expected 3 segments (H, ell, o), got %d", r, len(row.Segments))
+			}
+			if row.Segments[0].Colored {
+				t.Errorf("row %d: expected 'H' to be uncolored", r)
+			}
+			if !row.Segments[1].Colored {
+				t.Errorf("row %d: expected 'ell' to be colored", r)
+			}
+			if row.Segments[2].Colored {
+				t.Errorf("row %d: expected 'o' to be uncolored", r)
+			}
+		}
+	})
+
+	t.Run("multiline text and CRLF normalization", func(t *testing.T) {
+		lines, err := GenerateBlocks("Hello\r\nWorld", "standard", "World")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(lines) != 2 {
+			t.Fatalf("expected 2 lines, got %d", len(lines))
+		}
+		if len(lines[0].Blocks) != 1 || len(lines[1].Blocks) != 1 {
+			t.Fatalf("expected 1 block per line, got %d and %d", len(lines[0].Blocks), len(lines[1].Blocks))
+		}
+
+		// First line ("Hello") should have 8 rows and be uncolored
+		if len(lines[0].Blocks[0].Rows) != 8 {
+			t.Fatalf("line 1: expected 8 rows, got %d", len(lines[0].Blocks[0].Rows))
+		}
+		for r, row := range lines[0].Blocks[0].Rows {
+			for _, seg := range row.Segments {
+				if seg.Colored {
+					t.Errorf("line 1 row %d: expected 'Hello' to be uncolored", r)
+				}
+			}
+		}
+
+		// Second line ("World") should have 8 rows and be colored
+		if len(lines[1].Blocks[0].Rows) != 8 {
+			t.Fatalf("line 2: expected 8 rows, got %d", len(lines[1].Blocks[0].Rows))
+		}
+		for r, row := range lines[1].Blocks[0].Rows {
+			for _, seg := range row.Segments {
+				if !seg.Colored {
+					t.Errorf("line 2 row %d: expected 'World' to be colored", r)
+				}
+			}
+		}
+	})
+
+	t.Run("different banners shadow and thinkertoy", func(t *testing.T) {
+		for _, banner := range []string{"shadow", "thinkertoy"} {
+			lines, err := GenerateBlocks("Go", banner, "")
+			if err != nil {
+				t.Fatalf("banner %s failed: %v", banner, err)
+			}
+			if len(lines) != 1 {
+				t.Fatalf("banner %s: expected 1 line, got %d", banner, len(lines))
+			}
+			if len(lines[0].Blocks) != 1 {
+				t.Fatalf("banner %s: expected 1 block, got %d", banner, len(lines[0].Blocks))
+			}
+		}
+	})
+
+	t.Run("invalid banner returns error", func(t *testing.T) {
+		_, err := GenerateBlocks("Hello", "nonexistent", "")
+		if err == nil {
+			t.Fatalf("expected error for invalid banner, got nil")
+		}
+	})
+
+	t.Run("unsupported character returns error", func(t *testing.T) {
+		_, err := GenerateBlocks("Hello \x01", "standard", "")
+		if !errors.Is(err, ErrUnsupportedCharacter) {
+			t.Fatalf("expected ErrUnsupportedCharacter, got %v", err)
+		}
+	})
+
+}
