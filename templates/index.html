@@ -124,7 +124,7 @@
                 {{- range .Lines -}}
                     <figure class="art-container align-{{if $.Alignment}}{{$.Alignment}}{{else}}left{{end}}">
                         {{- range .Blocks -}}
-                            <pre><code>{{- range $index, $row := .Rows -}}
+                            <pre class="{{if and .Justify (eq $.Alignment "justify")}}justify-space{{end}}"><code>{{- range $index, $row := .Rows -}}
                                 {{- if gt $index 0}}{{"\n"}}{{end -}}
                                 {{- range $row.Segments -}}
                                     {{- if .Colored -}}

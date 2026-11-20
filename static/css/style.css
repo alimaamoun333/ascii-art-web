@@ -20,6 +20,10 @@
 
 /* ASCII-art alignment */
 
+.justify-space {
+    text-align: justify;
+}
+
 .art-container {
     display: flex;
     overflow-x: auto;
@@ -29,6 +33,15 @@
     width: max-content;
     flex-shrink: 0;
 }
+
+.align-justify pre.justify-space {
+    flex-grow: 1;
+   
+}
+
+.align-justify pre.justify-space span {
+    background-color: transparent;
+}s
 
 .align-left {
     justify-content: flex-start;
@@ -41,3 +54,4 @@
 .align-right {
     justify-content: flex-end;
 }
+
