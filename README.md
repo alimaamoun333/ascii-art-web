@@ -261,7 +261,7 @@ When submitting a `POST` request to `/ascii-art`, use `application/x-www-form-ur
 
 1. **Clone the repository:**
    ```bash
-   git clone https://01.nexteraeducation.net/git/amaamoun/ascii-art-web.git
+   git clone https://github.com/alimaamoun333/ascii-art-web.git
    cd ascii-art-web
    ```
 
