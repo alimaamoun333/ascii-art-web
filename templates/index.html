@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Generate ASCII art from text using standard, shadow, and thinkertoy banner fonts.">
+    <title>ASCII Art Generator</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <h1>ASCII Art Generator</h1>
+        <p>Convert your text into ASCII banner graphics.</p>
+    </header>
+
+    <hr>
+
+    <main>
+        <!-- Input Form Section -->
+        <section aria-labelledby="form-heading">
+            <h2 id="form-heading">Input Text and Options</h2>
+
+            <form action="/ascii-art" method="POST">
+                <fieldset>
+                    <legend>Text Input</legend>
+                    <p>
+                        <label for="text"><strong>Enter your text:</strong></label>
+                    </p>
+                    <p>
+                        <textarea
+                            id="text"
+                            name="text"
+                            rows="6"
+                            cols="60"
+                            placeholder="Type text here (ASCII characters 32-126)..."
+                            required
+                            autofocus
+                        >{{.Input}}</textarea>
+                    </p>
+                    <p>
+                        <small>Supported characters: standard printable ASCII characters and newlines.</small>
+                    </p>
+                </fieldset>
+
+                <br>
+
+                <fieldset>
+                    <legend>Banner Style</legend>
+                    <p>
+                        <label for="banner"><strong>Choose banner font:</strong></label>
+                        <select id="banner" name="banner" required>
+                            <option value="standard" selected>Standard</option>
+                            <option value="shadow">Shadow</option>
+                            <option value="thinkertoy">Thinkertoy</option>
+                        </select>
+                    </p>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Alignment</legend>
+                    <p>
+                        <label for="alignment"><strong>Choose alignment:</strong></label>
+                        <select id="alignment" name="alignment">
+                            <option value="left" selected>Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                            <option value="justify">Justify</option>
+                        </select>
+                    </p>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Color</legend>
+                    <p>
+                        <label for="color"><strong>Choose text color:</strong></label>
+                        <select id="color" name="color" required>
+                            <option value="black" selected>Black</option>
+                            <option value="red">Red</option>
+                            <option value="green">Green</option>
+                            <option value="yellow">Yellow</option>
+                            <option value="blue">Blue</option>
+                            <option value="magenta">Magenta</option>
+                            <option value="cyan">Cyan</option>
+                            <option value="white">White</option>
+                        </select>
+                    </p>
+                    <p>
+                        <label for="target"><strong>Text to color (optional):</strong></label>
+                    </p>
+                    <p>
+                        <input
+                            type="text"
+                            id="target"
+                            name="target"
+                            placeholder="Leave empty to color all text"
+                        >
+                    </p>
+                    <p>
+                        <small>Enter the exact text to color. Matching is case-sensitive. Leave empty to color the entire result.</small>
+                    </p>
+                </fieldset>
+
+                <br>
+
+                <div>
+                    <button type="submit"><strong>Generate ASCII Art</strong></button>
+                    <button type="button" onclick="document.getElementById('text').value = '';">Clear Text</button>
+                </div>
+            </form>
+        </section>
+
+        <br>
+        <hr>
+
+        <!-- Result Section -->
+        <section aria-labelledby="result-heading">
+            <h2 id="result-heading">Generated Result</h2>
+
+            {{if .Art}}
+                <figure class="art-container align-{{if .Alignment}}{{.Alignment}}{{else}}left{{end}}">
+                    <pre class="color-{{.Color}}"><code>{{.Art}}</code></pre>
+                </figure>
+            {{else if .Lines}}
+                {{- range .Lines -}}
+                    <figure class="art-container align-{{if $.Alignment}}{{$.Alignment}}{{else}}left{{end}}">
+                        {{- range .Blocks -}}
+                            <pre class="{{if and .Justify (eq $.Alignment "justify")}}justify-space{{end}}"><code>{{- range $index, $row := .Rows -}}
+                                {{- if gt $index 0}}{{"\n"}}{{end -}}
+                                {{- range $row.Segments -}}
+                                    {{- if .Colored -}}
+                                        <span class="color-{{$.Color}}">{{.Text}}</span>
+                                    {{- else -}}
+                                        {{.Text}}
+                                    {{- end -}}
+                                {{- end -}}
+                            {{- end -}}</code></pre>
+                        {{- end -}}
+                    </figure>
+                {{- end -}}
+            {{else}}
+                <p><em>Your ASCII art will appear here after clicking "Generate ASCII Art".</em></p>
+            {{end}}
+        </section>
+    </main>
+
+    <br>
+    <hr>
+
+    <footer>
+        <p><small>&copy; ASCII Art Web &bull; Powered by Go</small></p>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,57 @@
+/* ASCII-Art-Web presentation styles */
+
+/* Text colors */
+.color-black   { color: black; }
+.color-red     { color: red; }
+.color-green   { color: green; }
+.color-yellow  { color: yellow; }
+.color-blue    { color: blue; }
+.color-magenta { color: magenta; }
+.color-cyan    { color: cyan; }
+.color-white   { color: white; }
+
+/* Dark background for light-colored text */
+.color-white,
+.color-yellow,
+.color-magenta,
+.color-cyan {
+    background-color: #1F2937;
+}
+
+/* ASCII-art alignment */
+
+.justify-space {
+    text-align: justify;
+}
+
+.art-container {
+    display: flex;
+    overflow-x: auto;
+}
+
+.art-container pre {
+    width: max-content;
+    flex-shrink: 0;
+}
+
+.align-justify pre.justify-space {
+    flex-grow: 1;
+   
+}
+
+.align-justify pre.justify-space span {
+    background-color: transparent;
+}s
+
+.align-left {
+    justify-content: flex-start;
+}
+
+.align-center {
+    justify-content: center;
+}
+
+.align-right {
+    justify-content: flex-end;
+}
+
